@@ -3141,6 +3141,7 @@ class ChatHandler {
 // ── 微信链接摘要 ───────────────────────────────────────────────────────────
 
 const LINK_SUMMARY_MAX_HTML = 2 * 1024 * 1024;
+const LINK_SUMMARY_MAX_WECHAT_HTML = 6 * 1024 * 1024;
 const LINK_SUMMARY_MAX_TEXT = 30000;
 const LINK_SUMMARY_MAX_IMAGES = 3;
 
@@ -3220,7 +3221,8 @@ class LinkSummarizer {
     catch (e) {
       console.error("[wechat-diary] 链接抓取失败:", e);
       const login = e && e.kind === "login";
-      return { reply: login ? "链接已记下，但页面要求登录，暂时无法自动总结。" : "链接已记下，但网页抓取失败，稍后可以再发一次。", status: login ? "LOGIN_REQUIRED" : "FETCH_FAILED" };
+      const verify = e && e.kind === "verify";
+      return { reply: login ? "链接已记下，但页面要求登录，暂时无法自动总结。" : verify ? "链接已记下，但微信要求访问验证，暂时无法读取公众号正文。" : "链接已记下，但网页抓取失败，稍后可以再发一次。", status: login ? "LOGIN_REQUIRED" : verify ? "VERIFY_REQUIRED" : "FETCH_FAILED" };
     }
 
     let summary;
@@ -3259,15 +3261,22 @@ class LinkSummarizer {
   }
 
   async _fetch(url) {
+    const wechat = new URL(url).hostname.toLowerCase() === "mp.weixin.qq.com";
+    const request = { url, method: "GET", throw: false };
+    if (wechat) request.headers = {
+      "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36 MicroMessenger/8.0.49",
+      Referer: "https://mp.weixin.qq.com/",
+    };
     let timer;
     const timeout = new Promise((_, reject) => { timer = window.setTimeout(() => reject(new Error("timeout")), 20000); });
     let res;
-    try { res = await Promise.race([requestUrl({ url, method: "GET", throw: false }), timeout]); }
+    try { res = await Promise.race([requestUrl(request), timeout]); }
     finally { window.clearTimeout(timer); }
     if (res.status === 401 || res.status === 403) { const e = new Error("login required"); e.kind = "login"; throw e; }
     if (res.status < 200 || res.status >= 300) throw new Error("HTTP " + res.status);
     const html = String(res.text || "");
-    if (!html || html.length > LINK_SUMMARY_MAX_HTML) throw new Error(html ? "page too large" : "empty page");
+    if (/secitptpage\/verify|TCaptcha|<h2[^>]*>\s*环境异常\s*<\/h2>/i.test(html)) { const e = new Error("verification required"); e.kind = "verify"; throw e; }
+    if (!html || html.length > (wechat ? LINK_SUMMARY_MAX_WECHAT_HTML : LINK_SUMMARY_MAX_HTML)) throw new Error(html ? "page too large" : "empty page");
     const page = extractReadablePage(html, url);
     if (page.text.length < 120) {
       const e = new Error("not enough readable text");

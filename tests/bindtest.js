@@ -41,10 +41,11 @@ const chain = new Proxy({}, { get: () => () => chain });
 class Setting { constructor() { return chain; } }
 class AbstractInputSuggest {}
 
+let requestUrlImpl = async () => ({});
 const stub = {
   Plugin, PluginSettingTab, Setting, Modal, Notice, AbstractInputSuggest,
   normalizePath: (p) => p,
-  requestUrl: async () => ({}),
+  requestUrl: (...args) => requestUrlImpl(...args),
   Platform: { isDesktop: true },
 };
 
@@ -850,7 +851,7 @@ async function newPlugin(secrets, storedData) {
   await p._handleIncoming({ from_user_id: "U1", seq: "902", item_list: [{ type: 3, voice_item: { text: "第二条语音", media: { aes_key: "k" }, encode_type: 6 } }] });
   check("入站链路: 开关关 → 纯文字(现状)", attachCalls.length === 1 && calls.writes.includes("第二条语音"), JSON.stringify(calls.writes));
 
-  console.log("\n【35】v0.5.0 链接总结: 按日归档与临时图片分析");
+  console.log("\n【35】v0.5.1 链接总结: 公众号抓取、按日归档与临时图片分析");
   check("只识别独立公开 URL", I.standalonePublicUrl(" https://example.com/a#part ") === "https://example.com/a" && I.standalonePublicUrl("看看 https://example.com") === null);
   check("拒绝本机与内网 URL", I.standalonePublicUrl("http://127.0.0.1/a") === null && I.standalonePublicUrl("http://192.168.1.2/a") === null && I.standalonePublicUrl("http://localhost/a") === null);
   check("笔记标题清理非法字符", I.safeNoteTitle('A/B:C*D?E"F<G>H|I') === "A B C D E F G H I", I.safeNoteTitle('A/B:C*D?E"F<G>H|I'));
@@ -872,6 +873,15 @@ async function newPlugin(secrets, storedData) {
   p.settings.aiApiUrl = "https://api.example.com/v1/chat/completions";
   p.settings.aiModel = "deepseek-chat";
   p.ai.ready = () => true;
+  let wechatRequest = null;
+  requestUrlImpl = async (options) => { wechatRequest = options; return { status: 200, text: '<h2 class="weui-msg__title">环境异常</h2><script src="https://captcha.gtimg.com/TCaptcha.js"></script>' }; };
+  let verifyKind = "";
+  try { await p.linkSummarizer._fetch("https://mp.weixin.qq.com/s/example"); } catch (e) { verifyKind = e.kind || ""; }
+  check("公众号使用微信移动端请求头并识别验证页", verifyKind === "verify" && /MicroMessenger/.test(wechatRequest.headers["User-Agent"]) && wechatRequest.headers.Referer === "https://mp.weixin.qq.com/", JSON.stringify(wechatRequest));
+  p.linkSummarizer._fetch = async () => { const e = new Error("verification required"); e.kind = "verify"; throw e; };
+  const verifyReply = await p.linkSummarizer.process("https://mp.weixin.qq.com/s/blocked");
+  check("微信验证页给出准确回执", verifyReply.status === "VERIFY_REQUIRED" && verifyReply.reply.includes("访问验证"), JSON.stringify(verifyReply));
+  requestUrlImpl = async () => ({});
   let summaryMessages = [];
   p.ai.chatCompletion = async (messages) => { summaryMessages = messages; return "## 一句话摘要\n\n这是摘要。"; };
   p.app.vault = {
