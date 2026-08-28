@@ -22,10 +22,11 @@
 - 确认复用现有 `requestUrl`、`AiClient`、`DiaryWriter` 与微信回执链路。
 - V0.1 链接总结实现：URL 识别、内网地址拦截、正文提取、AI 摘要、Markdown 落库、去重和失败回执。
 - `node --check main.js` 通过；`node tests/bindtest.js` 全部 416 项通过。
+- 已建立隔离 Vault `C:\Users\L\Desktop\obsidian插件-测试库`，候选插件文件通过硬链接指向开发分支。
 
 ## 未完成
 
-- Obsidian GUI 冒烟验收。
+- Obsidian GUI 冒烟验收：测试 Vault 已打开，等待用户在 Obsidian 中手动确认“信任仓库作者并启用插件”。
 - DeepSeek/OpenAI 兼容接口的真实 Key 验证。
 - 生产 Vault 安装只在候选版验证后执行。
 
