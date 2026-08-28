@@ -11,7 +11,7 @@
 - 上游：`ArtemisLin/obsidian-wechat-diary`
 - 开发仓库：`Dongfangxiaoli/obsidian-wechat-diary`
 - 生产 Vault：`C:\Obsidian-Template-main`（开发阶段只读，仅在授权后备份并安装候选版）
-- 生产文件：`0.5.0`，升级前完整备份位于 `C:\Obsidian-Template-main\.obsidian\plugin-backups\wechat-diary-20260828195151435`；Obsidian 设置页已识别 `v0.5.0`，运行实例待关闭再开启插件后生效。
+- 生产运行：`0.5.0`，升级前完整备份位于 `C:\Obsidian-Template-main\.obsidian\plugin-backups\wechat-diary-20260828195151435`；插件已关闭再开启，状态栏确认“已连接”。
 
 ## 当前架构
 
@@ -30,11 +30,12 @@
 - 升级现场确认 Obsidian 的“重新加载插件列表”不会替换已运行实例；覆盖发布文件后必须关闭再开启该插件，才会执行新版 `main.js`。
 - `0.5.0` 候选功能：新剪藏按 `年/日期/` 归档，最多 3 张正文图片临时参与多模态总结，不写入 Vault；接口不接受图片时自动退回纯文本。
 - 生产升级文件校验完成：`main.js`、`manifest.json`、`styles.css` 与开发分支 SHA-256 一致，`data.json` 升级前后未变。
+- `0.5.0` 生产运行实例已重新加载，Obsidian 主界面状态栏确认“📖 微信日记: 已连接”。
 
 ## 未完成
 
 - 用户确认第二次微信回执包含摘要笔记链接。
-- `0.5.0` 运行实例待用户在 Obsidian 中关闭再开启 WeChat Workbench，然后用真实公众号/新闻图片链接验收。
+- `0.5.0` 待用真实公众号/新闻图片链接验收按日归档和多模态总结。
 
 ## 关键约束
 
@@ -46,9 +47,7 @@
 
 ## 下一步
 
-1. 确认微信端收到“链接总结好了”及摘要笔记链接。
-2. 关闭再开启 WeChat Workbench，确认状态栏仍为“已连接”。
-3. 发送一篇带图片的公众号或新闻链接，验证按日归档和多模态总结。
+1. 发送一篇新的、带图片的公众号或新闻链接，验证微信回执、按日归档和多模态总结。
 
 ## 待 Sol 审核
 
