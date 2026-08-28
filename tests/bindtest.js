@@ -851,10 +851,24 @@ async function newPlugin(secrets, storedData) {
   await p._handleIncoming({ from_user_id: "U1", seq: "902", item_list: [{ type: 3, voice_item: { text: "第二条语音", media: { aes_key: "k" }, encode_type: 6 } }] });
   check("入站链路: 开关关 → 纯文字(现状)", attachCalls.length === 1 && calls.writes.includes("第二条语音"), JSON.stringify(calls.writes));
 
-  console.log("\n【35】v0.5.1 链接总结: 公众号抓取、按日归档与临时图片分析");
+  console.log("\n【35】v0.6.0 链接总结: 公众号抓取、排版与远程图片");
   check("只识别独立公开 URL", I.standalonePublicUrl(" https://example.com/a#part ") === "https://example.com/a" && I.standalonePublicUrl("看看 https://example.com") === null);
   check("拒绝本机与内网 URL", I.standalonePublicUrl("http://127.0.0.1/a") === null && I.standalonePublicUrl("http://192.168.1.2/a") === null && I.standalonePublicUrl("http://localhost/a") === null);
   check("笔记标题清理非法字符", I.safeNoteTitle('A/B:C*D?E"F<G>H|I') === "A B C D E F G H I", I.safeNoteTitle('A/B:C*D?E"F<G>H|I'));
+  const textNode = (text) => ({ nodeType: 3, nodeValue: text });
+  const element = (tag, attrs = {}, childNodes = []) => ({
+    nodeType: 1, tagName: tag.toUpperCase(), childNodes,
+    children: childNodes.filter((node) => node.nodeType === 1),
+    getAttribute: (name) => attrs[name] || null,
+  });
+  const formatted = I.pageMarkdown(element("article", {}, [
+    element("h2", {}, [textNode("新品时间线")]),
+    element("p", {}, [textNode("第一段 "), element("strong", {}, [textNode("重点")])]),
+    element("img", { "data-src": "/cover.png", alt: "发布会时间" }),
+    element("img", { "data-src": "/cover.png", alt: "重复图" }),
+    element("ul", {}, [element("li", {}, [textNode("要点一")]), element("li", {}, [textNode("要点二")])]),
+  ]), "https://example.com/article");
+  check("正文 DOM 转基础 Markdown，并保留远程图片且去重", formatted.includes("## 新品时间线") && formatted.includes("**重点**") && formatted.includes("![发布会时间](<https://example.com/cover.png>)") && formatted.match(/cover\.png/g).length === 1 && formatted.includes("- 要点一\n- 要点二"), formatted);
   p = await newPlugin({ [SECRET_TOKEN]: "TOK1" }, BOUND_DATA());
   calls = stubWriter(p);
   let summarizedUrl = "";
@@ -889,9 +903,9 @@ async function newPlugin(secrets, storedData) {
     create: async (path, content) => { clipFiles[path] = content; },
   };
   p.writer._ensureParents = async () => {};
-  p.linkSummarizer._fetch = async () => ({ title: "示例/文章", text: "正文内容".repeat(100), images: ["https://example.com/1.jpg", "https://example.com/2.jpg", "https://example.com/3.jpg", "https://example.com/4.jpg"] });
+  p.linkSummarizer._fetch = async () => ({ title: "示例/文章", text: "正文内容".repeat(100), markdown: "## 小标题\n\n正文段落\n\n![原文图片](<https://example.com/1.jpg>)", images: ["https://example.com/1.jpg", "https://example.com/2.jpg", "https://example.com/3.jpg", "https://example.com/4.jpg"] });
   const clip = await p.linkSummarizer.process("https://example.com/article");
-  check("摘要 Markdown 真落库且保留来源和摘录", clip.status === "SUMMARIZED" && clipFiles[clip.path].includes("source_url: \"https://example.com/article\"") && clipFiles[clip.path].includes("## 原文摘录"), clip.path);
+  check("摘要 Markdown 真落库且保留来源、排版和远程图片", clip.status === "SUMMARIZED" && clipFiles[clip.path].includes("source_url: \"https://example.com/article\"") && clipFiles[clip.path].includes("## 小标题") && clipFiles[clip.path].includes("![原文图片](<https://example.com/1.jpg>)"), clip.path);
   const day = I.todayStr();
   check("剪藏按年和日归档", clip.path.startsWith("03资源/网络剪藏/" + day.slice(0, 4) + "/" + day + "/"), clip.path);
   check("最多 3 张网页图片临时传给多模态模型", Array.isArray(summaryMessages[1].content) && summaryMessages[1].content.filter((part) => part.type === "image_url").length === 3, JSON.stringify(summaryMessages[1]));

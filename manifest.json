@@ -1,7 +1,7 @@
 {
   "id": "wechat-diary",
   "name": "WeChat Workbench",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "minAppVersion": "1.11.4",
   "description": "Capture WeChat messages in Obsidian and turn public links into AI summaries without losing the original URL.",
   "author": "GuYu; Dongfangxiaoli fork",

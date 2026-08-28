@@ -3144,6 +3144,7 @@ const LINK_SUMMARY_MAX_HTML = 2 * 1024 * 1024;
 const LINK_SUMMARY_MAX_WECHAT_HTML = 6 * 1024 * 1024;
 const LINK_SUMMARY_MAX_TEXT = 30000;
 const LINK_SUMMARY_MAX_IMAGES = 3;
+const LINK_SUMMARY_MAX_EMBED_IMAGES = 12;
 
 function standalonePublicUrl(text) {
   const raw = String(text || "").trim();
@@ -3174,6 +3175,56 @@ function shortHash(text) {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
+function resolvePublicUrl(raw, baseUrl) {
+  if (!raw) return null;
+  try { return standalonePublicUrl(new URL(raw, baseUrl).toString()); } catch (e) { return null; }
+}
+
+function publicMediaUrl(raw, baseUrl) {
+  const url = resolvePublicUrl(raw, baseUrl);
+  return url && !/(?:logo|avatar|icon|qrcode|qr_code|spacer|pixel|loading)/i.test(url) ? url : null;
+}
+
+function pageMarkdown(root, url) {
+  const images = new Set();
+  const children = (node) => Array.from(node && node.childNodes || []).map(render).join("");
+  const render = (node) => {
+    if (!node) return "";
+    if (node.nodeType === 3) return String(node.nodeValue || "").replace(/\s+/g, " ");
+    if (node.nodeType !== 1) return "";
+    const tag = String(node.tagName || "").toLowerCase();
+    if (tag === "br") return "\n";
+    if (tag === "img") {
+      const image = publicMediaUrl(node.getAttribute("data-src") || node.getAttribute("data-original") || node.getAttribute("src"), url);
+      if (!image || images.has(image) || images.size >= LINK_SUMMARY_MAX_EMBED_IMAGES) return "";
+      images.add(image);
+      const alt = String(node.getAttribute("alt") || "原文图片").replace(/[\[\]\r\n]/g, " ").trim();
+      return "\n\n![" + alt + "](<" + image + ">)\n\n";
+    }
+    const body = children(node);
+    if (/^h[1-6]$/.test(tag)) return "\n\n" + "#".repeat(Number(tag[1])) + " " + body.trim() + "\n\n";
+    if (tag === "strong" || tag === "b") return body.trim() ? "**" + body.trim() + "**" : "";
+    if (tag === "em" || tag === "i") return body.trim() ? "*" + body.trim() + "*" : "";
+    if (tag === "a") {
+      const href = resolvePublicUrl(node.getAttribute("href"), url);
+      return href && body.trim() ? "[" + body.trim() + "](<" + href + ">)" : body;
+    }
+    if (tag === "blockquote") return "\n\n" + body.trim().split("\n").map((line) => "> " + line).join("\n") + "\n\n";
+    if (tag === "ul" || tag === "ol") {
+      const items = Array.from(node.children || []).filter((el) => String(el.tagName || "").toLowerCase() === "li");
+      return "\n\n" + items.map((item, i) => (tag === "ol" ? (i + 1) + ". " : "- ") + children(item).trim().replace(/\n+/g, " ")).join("\n") + "\n\n";
+    }
+    if (tag === "pre") return "\n\n```\n" + body.trim() + "\n```\n\n";
+    if (tag === "code") return body.trim() ? "`" + body.trim() + "`" : "";
+    if (/^(p|div|section|article|main|figure|figcaption|table|tr)$/.test(tag)) return "\n\n" + body.trim() + "\n\n";
+    if (tag === "li" || tag === "td" || tag === "th") return body + " ";
+    return body;
+  };
+  return render(root)
+    .replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function extractReadablePage(html, url) {
   if (typeof DOMParser === "undefined") throw new Error("DOMParser unavailable");
   const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
@@ -3184,9 +3235,10 @@ function extractReadablePage(html, url) {
   };
   const title = meta('meta[property="og:title"]') || meta('meta[name="twitter:title"]') ||
     String(doc.title || "").trim() || new URL(url).hostname;
-  const root = doc.querySelector("article,main,[role='main']") || doc.body;
+  const root = doc.querySelector("#js_content,article,main,[role='main']") || doc.body;
   const text = String(root && (root.innerText || root.textContent) || "")
     .replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim();
+  const markdown = pageMarkdown(root, url);
   const candidates = [meta('meta[property="og:image"]')];
   for (const img of root ? root.querySelectorAll("img") : []) {
     candidates.push(img.getAttribute("data-src"), img.getAttribute("data-original"), img.getAttribute("src"));
@@ -3194,13 +3246,12 @@ function extractReadablePage(html, url) {
   const images = [];
   for (const raw of candidates) {
     if (!raw) continue;
-    let image;
-    try { image = standalonePublicUrl(new URL(raw, url).toString()); } catch (e) { image = null; }
-    if (!image || images.includes(image) || /(?:logo|avatar|icon|qrcode|qr_code|spacer|pixel|loading)/i.test(image)) continue;
+    const image = publicMediaUrl(raw, url);
+    if (!image || images.includes(image)) continue;
     images.push(image);
     if (images.length === LINK_SUMMARY_MAX_IMAGES) break;
   }
-  return { title, text, images };
+  return { title, text, markdown, images };
 }
 
 class LinkSummarizer {
@@ -3292,6 +3343,7 @@ class LinkSummarizer {
     const base = normalizePath(folder + "/" + day.slice(0, 4) + "/" + day + "/" + safeNoteTitle(page.title) + "-" + shortHash(url));
     let path = base + ".md", n = 2;
     while (this.plugin.app.vault.getFileByPath(path)) path = base + "-" + n++ + ".md";
+    const excerpt = String(page.markdown || page.text || "").slice(0, LINK_SUMMARY_MAX_TEXT).trim();
     const content = "---\n" +
       "title: " + JSON.stringify(page.title) + "\n" +
       "source: wechat-link\n" +
@@ -3299,7 +3351,7 @@ class LinkSummarizer {
       "captured_at: " + JSON.stringify(new Date().toISOString()) + "\n" +
       "ai_model: " + JSON.stringify(this.plugin.settings.aiModel) + "\n" +
       "---\n\n# " + safeNoteTitle(page.title) + "\n\n> [原文链接](<" + url + ">)\n\n" + summary.trim() +
-      "\n\n## 原文摘录\n\n" + page.text.slice(0, 2000) + "\n";
+      "\n\n## 原文摘录\n\n" + excerpt + "\n";
     const vault = this.plugin.app.vault;
     await this.plugin.writer._ensureParents(path);
     await vault.create(path, content);
@@ -5450,7 +5502,7 @@ WechatDiaryPlugin.__internals = {
   pingReply, welcomeText, undoOkReply, logicalTodayStr, setDayStartHour, isNightNow, canMergeIntoLastHeader,
   isUndoPhrase, signoffReply, nightSignoffTip, setNudgeNightHour, isLateNight, DiaryWriter,
   reminderDue, reminderText, sniffAudioExt, md5Hex, pcmToWav, silkToWav, getSilkLib,
-  standalonePublicUrl, safeNoteTitle, shortHash, extractReadablePage, LinkSummarizer,
+  standalonePublicUrl, safeNoteTitle, shortHash, pageMarkdown, extractReadablePage, LinkSummarizer,
   texts2: { REMINDER_LINES, FILE_DUP_KEY_REPLY, FILE_TOO_BIG_REPLY, VOICE_FALLBACK_FAIL_REPLY,
     VIDEO_DUP_KEY_REPLY, VIDEO_TOO_BIG_REPLY, ATTACH_DISK_FULL_REPLY, REMINDER_TIME_RE },
 };
