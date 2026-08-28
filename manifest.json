@@ -1,10 +1,10 @@
 {
   "id": "wechat-diary",
-  "name": "WeChat Diary",
-  "version": "0.3.1",
+  "name": "WeChat Workbench",
+  "version": "0.4.0",
   "minAppVersion": "1.11.4",
-  "description": "Capture diary entries and quick notes by chatting to a WeChat bot. Text, voice, photos, files, and videos land in your vault as daily Markdown files.",
-  "author": "GuYu",
-  "authorUrl": "https://github.com/ArtemisLin",
+  "description": "Capture WeChat messages in Obsidian and turn public links into AI summaries without losing the original URL.",
+  "author": "GuYu; Dongfangxiaoli fork",
+  "authorUrl": "https://github.com/Dongfangxiaoli/obsidian-wechat-diary",
   "isDesktopOnly": true
 }

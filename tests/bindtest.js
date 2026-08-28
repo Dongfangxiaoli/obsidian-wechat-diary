@@ -850,6 +850,46 @@ async function newPlugin(secrets, storedData) {
   await p._handleIncoming({ from_user_id: "U1", seq: "902", item_list: [{ type: 3, voice_item: { text: "第二条语音", media: { aes_key: "k" }, encode_type: 6 } }] });
   check("入站链路: 开关关 → 纯文字(现状)", attachCalls.length === 1 && calls.writes.includes("第二条语音"), JSON.stringify(calls.writes));
 
+  console.log("\n【35】v0.4.0 链接总结: 原链接先落库，再触发摘要");
+  check("只识别独立公开 URL", I.standalonePublicUrl(" https://example.com/a#part ") === "https://example.com/a" && I.standalonePublicUrl("看看 https://example.com") === null);
+  check("拒绝本机与内网 URL", I.standalonePublicUrl("http://127.0.0.1/a") === null && I.standalonePublicUrl("http://192.168.1.2/a") === null && I.standalonePublicUrl("http://localhost/a") === null);
+  check("笔记标题清理非法字符", I.safeNoteTitle('A/B:C*D?E"F<G>H|I') === "A B C D E F G H I", I.safeNoteTitle('A/B:C*D?E"F<G>H|I'));
+  p = await newPlugin({ [SECRET_TOKEN]: "TOK1" }, BOUND_DATA());
+  calls = stubWriter(p);
+  let summarizedUrl = "";
+  p.linkSummarizer.process = async (url) => { summarizedUrl = url; return { reply: "链接总结好了：[[网络剪藏/示例]]" }; };
+  r = await p.agent.onMessage("U1", "https://example.com/a#part", false, [], null);
+  check("URL 原文先写进日记", calls.writes[0] === "https://example.com/a#part", JSON.stringify(calls.writes));
+  check("摘要收到去锚点后的 URL 并回执", summarizedUrl === "https://example.com/a" && r.includes("链接总结好了"), r);
+  p.settings.linkSummaryEnabled = false;
+  summarizedUrl = "";
+  await p.agent.onMessage("U1", "https://example.com/b", false, [], null);
+  check("关闭开关后只记链接不总结", summarizedUrl === "" && calls.writes.includes("https://example.com/b"));
+  p = await newPlugin({ [SECRET_TOKEN]: "TOK1" }, BOUND_DATA());
+  const noAi = await p.linkSummarizer.process("https://example.com/no-ai");
+  check("未配 AI 时给明确状态，不发网络请求", noAi.status === "AI_CONFIG_REQUIRED" && noAi.reply.includes("插件设置"), JSON.stringify(noAi));
+  const clipFiles = {};
+  p.settings.aiApiUrl = "https://api.example.com/v1/chat/completions";
+  p.settings.aiModel = "deepseek-chat";
+  p.ai.ready = () => true;
+  p.ai.chatCompletion = async () => "## 一句话摘要\n\n这是摘要。";
+  p.app.vault = {
+    getFileByPath: (path) => path in clipFiles ? { path } : null,
+    create: async (path, content) => { clipFiles[path] = content; },
+  };
+  p.writer._ensureParents = async () => {};
+  p.linkSummarizer._fetch = async () => ({ title: "示例/文章", text: "正文内容".repeat(100) });
+  const clip = await p.linkSummarizer.process("https://example.com/article");
+  check("摘要 Markdown 真落库且保留来源和摘录", clip.status === "SUMMARIZED" && clipFiles[clip.path].includes("source_url: \"https://example.com/article\"") && clipFiles[clip.path].includes("## 原文摘录"), clip.path);
+  const clip2 = await p.linkSummarizer.process("https://example.com/article");
+  check("同一 URL 去重并复用已有笔记", clip2.cached === true && clip2.path === clip.path && Object.keys(clipFiles).length === 1, JSON.stringify(clip2));
+  delete p.data.linkSummary.processed["https://example.com/article"];
+  const clip3 = await p.linkSummarizer.process("https://example.com/article");
+  check("状态丢失时文件名碰撞自动编号，不覆盖已有笔记", clip3.path !== clip.path && Object.keys(clipFiles).length === 2, clip3.path);
+  p.app.vault.create = async () => { throw new Error("disk full"); };
+  const writeFail = await p.linkSummarizer.process("https://example.com/write-fail");
+  check("摘要写入失败不抛出，原链接仍有明确回执", writeFail.status === "WRITE_FAILED" && writeFail.reply.includes("链接已记下"), JSON.stringify(writeFail));
+
   console.log("\n────────────────────────");
   console.log(fail === 0 ? `全部通过 (${pass})` : `${pass} 通过, ${fail} 失败`);
   process.exit(fail === 0 ? 0 : 1);
