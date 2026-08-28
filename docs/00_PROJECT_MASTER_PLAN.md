@@ -10,7 +10,8 @@
 - 候选版本：`0.4.0`
 - 上游：`ArtemisLin/obsidian-wechat-diary`
 - 开发仓库：`Dongfangxiaoli/obsidian-wechat-diary`
-- 生产 Vault：`C:\Obsidian-Template-main`（开发阶段只读，不直接覆盖）
+- 生产 Vault：`C:\Obsidian-Template-main`（开发阶段只读，仅在授权后备份并安装候选版）
+- 生产安装：`0.4.0`，旧版备份位于 `C:\Obsidian-Template-main\.obsidian\plugin-backups\wechat-diary-20260828185412107`
 
 ## 当前架构
 
@@ -24,12 +25,12 @@
 - `node --check main.js` 通过；`node tests/bindtest.js` 全部 416 项通过。
 - 已建立隔离 Vault `C:\Users\L\Desktop\obsidian插件-测试库`，候选插件文件通过硬链接指向开发分支。
 - Obsidian 1.13.7 GUI 冒烟通过：候选插件成功加载，状态栏正常显示，设置页可见“微信”“链接总结”“AI”及其字段。
+- 已备份并安装到生产 Vault；三个发布文件与开发分支 SHA-256 一致，插件列表显示 `WeChat Workbench v0.4.0`，原微信绑定保持“已连接”。
 
 ## 未完成
 
 - 微信到摘要笔记的真实端到端验收；隔离 Vault 不重复绑定，避免同时启动第二条微信长轮询。
 - DeepSeek/OpenAI 兼容接口的真实 Key 验证。
-- 生产 Vault 安装只在候选版验证后执行。
 
 ## 关键约束
 
@@ -42,8 +43,8 @@
 ## 下一步
 
 1. 用户在本机插件设置中填写真实 AI 配置（Key 不进入聊天、Vault 或 Git）。
-2. 备份生产插件后安装候选版，用一个公开网页链接验证微信回执和笔记落库。
-3. 通过后保留 `0.4.0`，失败则回滚到生产库原 `0.3.1` 文件。
+2. 从微信发送一个独立公开网页链接，验证原链接、微信回执和摘要笔记落库。
+3. 通过后保留 `0.4.0`；失败则用已保存的 `0.3.1` 备份回滚。
 
 ## 待 Sol 审核
 
